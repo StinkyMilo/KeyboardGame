@@ -153,7 +153,7 @@ function newMoles(count){
             progress:0,
             dying:false
         };
-        console.log(`Adding new ${mole.mainColor} mole on key ${mole.keyName}`);
+        // console.log(`Adding new ${mole.mainColor} mole on key ${mole.keyName}`);
         gameState.moles.push(mole);
         gameState.moleKeyMap[keyId] = mole;
     }
@@ -201,13 +201,13 @@ function updateMoles(){
     }
 }
 
-const MAX_MOLE_SPAWN_COOLDOWN=60;
-const MIN_MOLE_SPAWN_COOLDOWN=20;
+const MAX_MOLE_SPAWN_COOLDOWN=40;
+const MIN_MOLE_SPAWN_COOLDOWN=0;
 const MAX_MOLES = 3;
 const DIGIT_CHANGE_MAX_COOLDOWN = 30;
 
 let gameState = {
-    state: "whacking",
+    state: "over",
     framesLeft: MAX_TIME,
     moles: [],
     moleKeyMap:{},
@@ -314,29 +314,47 @@ function getAvailableLeds() {
 kbl.addListener((e, down) => {
     //TODO: Determine if this is the first frame it's down rather than if it's just currently held.
     if (e.state == "DOWN") {
-        console.log(e.name);
-        let anyMatched = false;
-        for(let i = gameState.moles.length-1; i >= 0; i--){
-            if(!gameState.moles[i].dying && gameState.moles[i].keyName==e.name){
-                let oldComboColor = gameState.comboColor;
-                gameState.comboColor = gameState.moles[i].mainColor;
-                if(gameState.comboColor == oldComboColor){
-                    gameState.comboCount++;
-                }else{
-                    gameState.comboCount=0;
+        if(gameState.state=="whacking"){
+            // console.log(e.name);
+            let anyMatched = false;
+            for(let i = gameState.moles.length-1; i >= 0; i--){
+                if(!gameState.moles[i].dying && gameState.moles[i].keyName==e.name){
+                    let oldComboColor = gameState.comboColor;
+                    gameState.comboColor = gameState.moles[i].mainColor;
+                    if(gameState.comboColor == oldComboColor){
+                        gameState.comboCount++;
+                    }else{
+                        gameState.comboCount=0;
+                    }
+                    gameState.score+=Math.min(3,gameState.comboCount+1);
+                    gameState.moles[i].dying = true;
+                    gameState.moles[i].progress = 0;
+                    // delete gameState.moleKeyMap[gameState.moles[i].key];
+                    // gameState.moles.splice(i,1);
+                    anyMatched=true;
+                    break;
                 }
-                gameState.score+=Math.min(3,gameState.comboCount+1);
-                gameState.moles[i].dying = true;
-                gameState.moles[i].progress = 0;
-                // delete gameState.moleKeyMap[gameState.moles[i].key];
-                // gameState.moles.splice(i,1);
-                anyMatched=true;
-                break;
             }
-        }
-        if(!anyMatched){
-            gameState.comboColor="none";
-            gameState.comboCount=0;
+            if(!anyMatched){
+                gameState.comboColor="none";
+                gameState.comboCount=0;
+            }
+        }else if(gameState.state=="over"){
+            if(e.name=="SPACE"){
+                setLedsInRange(0, 0, 400, 400, BLACK);
+                gameState = {
+                    state: "whacking",
+                    framesLeft: MAX_TIME,
+                    moles: [],
+                    moleKeyMap:{},
+                    moleSpawnCooldown: 0,
+                    score: 0,
+                    comboColor:"none",
+                    comboCount:0,
+                    digitChangeCooldown:DIGIT_CHANGE_MAX_COOLDOWN,
+                    digitIndex:0
+                };
+            }
         }
     }
 });
@@ -406,22 +424,10 @@ function main() {
             updateMoles();
             updateComboCount();
 
-            setLedGroup(numpadLeds,WHITE);
-            let number = `${gameState.score}`[gameState.digitIndex];
-            setLedGroup(bigNumbers[number],COLOR_ORDER[gameState.digitIndex%COLOR_ORDER.length]);
-
             gameState.framesLeft--;
             if (gameState.framesLeft <= 0) {
+                console.log(`Game over! Your score was ${gameState.score}.`);
                 gameState.state = "over";
-            }
-
-            gameState.digitChangeCooldown--;
-            if(gameState.digitChangeCooldown<=0){
-                gameState.digitChangeCooldown = DIGIT_CHANGE_MAX_COOLDOWN;
-                gameState.digitIndex++;
-                if(gameState.digitIndex >= `${gameState.score}`.length){
-                    gameState.digitIndex=0;
-                }
             }
 
             gameState.moleSpawnCooldown--;
@@ -433,7 +439,23 @@ function main() {
 
         } else if (gameState.state == "over") {
             setLedsInRange(0, 0, 400, 400, RED);
+            setLedColor("SPACE",BLUE);
         }
+
+        //Update score
+        setLedGroup(numpadLeds,WHITE);
+        let number = `${gameState.score}`[gameState.digitIndex];
+        setLedGroup(bigNumbers[number],COLOR_ORDER[gameState.digitIndex%COLOR_ORDER.length]);
+        gameState.digitChangeCooldown--;
+        if(gameState.digitChangeCooldown<=0){
+            gameState.digitChangeCooldown = DIGIT_CHANGE_MAX_COOLDOWN;
+            gameState.digitIndex++;
+            if(gameState.digitIndex >= `${gameState.score}`.length){
+                gameState.digitIndex=0;
+            }
+        }
+
+
         updateLeds();
         // console.log(gameState.framesLeft/30);
     }, 1000 / 30);
